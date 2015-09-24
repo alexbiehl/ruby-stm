@@ -132,7 +132,8 @@ module STM
         read_set.each { |tvar, _| tvar.unsafe_lock }
 
         if is_valid? read_set
-
+          #TODO: figure a method to block until one of the tvars
+          # in read set changes, then rollback
         else
           # Invalid transaction, rollback.
           read_set.each { |tvar, _| tvar.unsafe_unlock }

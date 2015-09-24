@@ -143,7 +143,7 @@ module STM
       end
     end
 
-    # Checks for validit of this transaction
+    # Checks the validity of given tvar set. Assumes you own the lock on the tvars.
     def is_valid?(tvars)
       # Delete any tvar from read set which has the same version as when last read
       # if that collection is empty we have a valid transaction.

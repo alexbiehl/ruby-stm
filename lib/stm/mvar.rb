@@ -51,11 +51,11 @@ module STM
     end
 
     def tryPut(value)
-      @writer.synchronized {
+      @writer.synchronize {
         if !@empty
           false
         else
-          @reader.synchronized {
+          @reader.synchronize {
             @empty = false
             @content = value
             @readCondVar.signal

@@ -50,6 +50,10 @@ module STM
       @suspended.push(mvar)
     end
 
+    def <=>(other)
+      object_id <=> other.object_id
+    end
+
   end
 
   class Txn
@@ -99,7 +103,7 @@ module STM
         result = yield self
 
         # Collect and lock each tvar participating in this transaction
-        tvars = (@read_set.keys + @write_set.keys).uniq
+        tvars = (@read_set.keys + @write_set.keys).uniq.sort
         tvars.each { |tvar| tvar.unsafe_lock }
 
         if is_valid? @read_set

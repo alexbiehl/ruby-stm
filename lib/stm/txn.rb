@@ -1,3 +1,5 @@
+require_relative 'mvar'
+
 module STM
 
   class TVar
@@ -6,7 +8,7 @@ module STM
       @value = value
       @version = 0
       @lock = Mutex.new
-      @suspended = ConditionVariable.new
+      @suspended = []
     end
 
     # Locks the tvar for any safe access
@@ -33,6 +35,8 @@ module STM
     def unsafe_write(value)
       @version = @version + 1
       @value = value
+      @suspended.each { |thr| thr.tryPut(:unlock) }
+      @suspended = []
     end
 
     # Safely read the tvar.
@@ -42,24 +46,18 @@ module STM
       }
     end
 
-
-    def suspendOn
-
+    def suspend(mvar)
+      @suspended.push(mvar)
     end
 
   end
 
   class Txn
 
-    class RetryError
+    class RetryError < StandardError
     end
 
-    class RollbackError
-    end
-
-    def initialize
-      @read_set = {}
-      @write_set = {}
+    class RollbackError < StandardError
     end
 
     def read(tvar)
@@ -68,7 +66,7 @@ module STM
         @write_set[tvar]
       else
         # We haven't written it yet in this transaction, take value and version
-        version, value = tvar.unsafe_read
+        version, value = tvar.read
 
         if @read_set.has_key? tvar
           # We have read the version/value in this transaction.
@@ -94,6 +92,9 @@ module STM
 
     def atomically(&blk)
       begin
+        @read_set = {}
+        @write_set = {}
+
         # Execute the transaction
         result = yield self
 
@@ -125,13 +126,24 @@ module STM
         # Some TVars changed dureing transaction, try again.
         atomically(blk)
       rescue RetryError
-
-        read_set = @read_set
-        write_set = @write_set
-
-        read_set.each { |tvar, _| tvar.unsafe_lock }
+        @read_set.each { |tvar, _| tvar.unsafe_lock }
 
         if is_valid? read_set
+          # if this is still a valid transaction, we have to wait for any tvars
+          # in read_set to change
+
+          # we use a mvar to block
+          blocker = Mvar.new
+
+          read_set.each { |tvar|
+            # any tvar that changes writes to the MVar
+            tvar.suspend(blocker)
+            tvar.unsafe_unlock
+          }
+
+          blocker.take
+          atomically(blk)
+
           #TODO: figure a method to block until one of the tvars
           # in read set changes, then rollback
         else
@@ -159,10 +171,24 @@ end
 var1 = STM::TVar.new(1)
 var2 = STM::TVar.new(2)
 
-result = STM::Txn.atomically { |txn|
-  v1 = txn.read(var1)
-  txn.write(var2, v1 + 5)
-  txn.read(var2)
+thr = Thread.new {
+  while true
+    result = STM::Txn.atomically { |txn|
+      v1 = txn.read(var2)
+      txn.write(var2, v1 + 5)
+      txn.write(var1, v1)
+      txn.read(var2)
+    }
+    puts ("Thread2:" + result.to_s)
+  end
 }
 
-puts result
+while true
+  result = STM::Txn.atomically { |txn|
+    v1 = txn.read(var1)
+    txn.write(var2, v1 + 5)
+    txn.read(var2)
+  }
+
+  puts ("Thread1: " + result.to_s)
+end

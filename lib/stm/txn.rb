@@ -128,7 +128,7 @@ module STM
       rescue RetryError
         @read_set.each { |tvar, _| tvar.unsafe_lock }
 
-        if is_valid? read_set
+        if is_valid? @read_set
           # if this is still a valid transaction, we have to wait for any tvars
           # in read_set to change
 

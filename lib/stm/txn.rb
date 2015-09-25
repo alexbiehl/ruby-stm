@@ -124,7 +124,7 @@ module STM
 
       rescue RollbackError
         # Some TVars changed dureing transaction, try again.
-        atomically(blk)
+        atomically(&blk)
       rescue RetryError
         @read_set.each { |tvar, _| tvar.unsafe_lock }
 
@@ -135,21 +135,21 @@ module STM
           # we use a mvar to block
           blocker = Mvar.new
 
-          read_set.each { |tvar|
+          @read_set.each { |tvar|
             # any tvar that changes writes to the MVar
             tvar.suspend(blocker)
             tvar.unsafe_unlock
           }
 
           blocker.take
-          atomically(blk)
+          atomically(&blk)
 
           #TODO: figure a method to block until one of the tvars
           # in read set changes, then rollback
         else
           # Invalid transaction, rollback.
-          read_set.each { |tvar, _| tvar.unsafe_unlock }
-          atomically(blk)
+          @read_set.each { |tvar, _| tvar.unsafe_unlock }
+          atomically(&blk)
         end
 
       end

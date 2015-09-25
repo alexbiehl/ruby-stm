@@ -66,13 +66,13 @@ module STM
         @write_set[tvar]
       else
         # We haven't written it yet in this transaction, take value and version
-        version, value = tvar.read
+        version, value = tvar.read()
 
         if @read_set.has_key? tvar
           # We have read the version/value in this transaction.
           if @read_set[tvar] != version
             # If the version don't match up retry again.
-            raise RetryError
+            raise RollbackError
           end
         else
           # First time we have written this tvar, remember version
@@ -177,7 +177,7 @@ thr = Thread.new {
       v1 = txn.read(var2)
       txn.write(var2, v1 + 5)
       txn.write(var1, v1)
-      txn.read(var2)
+      txn.read(var1)
     }
     puts ("Thread2:" + result.to_s)
   end
